@@ -1,0 +1,11 @@
+1. podla web3j musi byt r a s 32 byteov https://github.com/web3j/web3j/blob/c65e6bebf52fd3e897056b0ffb8dac01153668f1/crypto/src/main/java/org/web3j/crypto/Sign.java#L243
+   Info:
+     -> Why the signature is always 65 (1+32+32) bytes long? https://bitcoin.stackexchange.com/questions/12554/why-the-signature-is-always-65-13232-bytes-long
+
+
+
+
+RLP: https://github.com/ethereum/wiki/wiki/RLP
+     Appendix B. Recursive Length Prefix -> http://gavwood.com/paper.pdf
+     RlpEncoder.java https://github.com/web3j/web3j/blob/master/rlp/src/main/java/org/web3j/rlp/RlpEncoder.java
+     RlpDecoder.java https://github.com/web3j/web3j/blob/master/rlp/src/main/java/org/web3j/rlp/RlpDecoder.java

@@ -1,0 +1,217 @@
+
+        ////////
+
+        /*
+        //
+        //
+        //
+        // https://gist.github.com/tmarkovski/9fc008fc034511bbbee93a5c4cd1a99a
+        // TODO https://github.com/hyperledger-archives/fabric-api-archive/blob/master/api/src/main/java/org/hyperledger/common/BouncyCastleCrypto.java
+
+        X9ECParameters curve = CustomNamedCurves.getByName("secp256k1"); //SECNamedCurves.getByName("secp256k1");
+        ECDomainParameters ecParams = new ECDomainParameters(curve.getCurve(), curve.getG(), curve.getN(), curve.getH(), curve.getSeed());
+
+
+        SecureRandom secureRandom = new SecureRandom();
+        ECKeyGenerationParameters keyGenParam = new ECKeyGenerationParameters(ecParams, secureRandom);
+
+
+        ECKeyPairGenerator gen = new ECKeyPairGenerator();
+        gen.init(keyGenParam);
+        AsymmetricCipherKeyPair keyPair2 = gen.generateKeyPair();
+
+        ECPrivateKeyParameters privatekey = (ECPrivateKeyParameters) keyPair2.getPrivate();
+        ECPublicKeyParameters publickey = (ECPublicKeyParameters) keyPair2.getPublic();
+        System.out.println(privatekey.getD());
+        System.out.println("" + publickey.getParameters());
+
+        //Sign
+        // https://www.programcreek.com/java-api-examples/?code=hyperledger-archives/fabric-api-archive/fabric-api-archive-master/api/src/main/java/org/hyperledger/common/BouncyCastleCrypto.java
+        ECDSASigner signer = new ECDSASigner(new HMacDSAKCalculator(new SHA256Digest()));
+        signer.init(true, new ECPrivateKeyParameters(new BigInteger(privatekey.getD().toByteArray()), ecParams));
+        BigInteger[] signature2 = signer.generateSignature(msgHash);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            DERSequenceGenerator seq = new DERSequenceGenerator(baos);
+            seq.addObject(new ASN1Integer(signature2[0]));
+            BigInteger HALF_CURVE_ORDER = keyGenParam.getDomainParameters().getN().shiftRight(1);
+            BigInteger anonicalS = null;
+                if (signature2[1].compareTo(HALF_CURVE_ORDER) <= 0) {
+                    anonicalS = signature2[1];
+                } else {
+                    anonicalS = curve.getN().subtract(signature2[1]);
+                }
+
+            seq.addObject(new ASN1Integer(anonicalS));
+            seq.close();
+            System.out.println(baos.toByteArray());
+        } catch (IOException e) {
+            System.out.println("ERROR");
+        }
+
+//        ECDSASigner signer2 = new ECDSASigner();
+//        signer2.init(false, new ECPublicKeyParameters(curve.getCurve().decodePoint(publicKey.toByteArray()), ecParams));
+
+        ASN1InputStream asn1 = new ASN1InputStream(baos.toByteArray());
+        DLSequence seq = (DLSequence) asn1.readObject();
+        BigInteger r = ((ASN1Integer) seq.getObjectAt(0)).getPositiveValue();
+        BigInteger s = ((ASN1Integer) seq.getObjectAt(1)).getPositiveValue();
+        System.out.println("r"+r);
+        System.out.println("s"+s);
+
+//        signer2.verifySignature(hash, r, s);
+
+
+
+
+
+
+        // TODO do not delete below it's a way how to compute recovery ID
+//        LinkedList<byte[]> sigData = new LinkedList<>();
+//        byte recoveryId = getRecoveryId(sig[0].toByteArray(), sig[1].toByteArray(), messageToSign.getBytes(), myPublicKey);
+//        for (BigInteger sigChunk : sig) {
+//            sigData.add(sigChunk.toByteArray());
+//        }
+//        sigData.add(new byte[]{recoveryId});
+
+
+//    // TODO do not delete below it's a way how to compute recovery ID
+//    public static byte getRecoveryId(byte[] sigR, byte[] sigS, byte[] message, byte[] publicKey) {
+//        ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec(SECP256K1);
+//        BigInteger pointN = spec.getN();
+//        for (int recoveryId = 0; recoveryId < 2; recoveryId++) {
+//            try {
+//                BigInteger pointX = new BigInteger(1, sigR);
+//
+//                X9IntegerConverter x9 = new X9IntegerConverter();
+//                byte[] compEnc = x9.integerToBytes(pointX, 1 + x9.getByteLength(spec.getCurve()));
+//                compEnc[0] = (byte) ((recoveryId & 1) == 1 ? 0x03 : 0x02);
+//                ECPoint pointR = spec.getCurve().decodePoint(compEnc);
+//                if (!pointR.multiply(pointN).isInfinity()) {
+//                    continue;
+//                }
+//
+//                BigInteger pointE = new BigInteger(1, message);
+//                BigInteger pointEInv = BigInteger.ZERO.subtract(pointE).mod(pointN);
+//                BigInteger pointRInv = new BigInteger(1, sigR).modInverse(pointN);
+//                BigInteger srInv = pointRInv.multiply(new BigInteger(1, sigS)).mod(pointN);
+//                BigInteger pointEInvRInv = pointRInv.multiply(pointEInv).mod(pointN);
+//                ECPoint pointQ = ECAlgorithms.sumOfTwoMultiplies(spec.getG(), pointEInvRInv, pointR, srInv);
+//                byte[] pointQBytes = pointQ.getEncoded(false);
+//                boolean matchedKeys = true;
+//                for (int j = 0; j < publicKey.length; j++) {
+//                    if (pointQBytes[j] != publicKey[j]) {
+//                        matchedKeys = false;
+//                        break;
+//                    }
+//                }
+//                if (!matchedKeys) {
+//                    continue;
+//                }
+//                return (byte) (0xFF & recoveryId);
+//            } catch (Exception e) {
+//                LOGGER.error(null, e);
+//            }
+//        }
+//
+//        return (byte) 0xFF;
+//    }
+
+    /**
+     * Recover the public key that corresponds to the private key, which signed this message.
+     */
+    public static byte[] recoverPublicKey(byte[] sigR, byte[] sigS, byte[] sigV, byte[] message) {
+        ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec(SECP256K1);
+        BigInteger pointN = spec.getN();
+
+        try {
+            BigInteger pointX = new BigInteger(1, sigR);
+
+            X9IntegerConverter x9 = new X9IntegerConverter();
+            byte[] compEnc = x9.integerToBytes(pointX, 1 + x9.getByteLength(spec.getCurve()));
+            compEnc[0] = (byte) ((sigV[0] & 1) == 1 ? 0x03 : 0x02);
+            ECPoint pointR = spec.getCurve().decodePoint(compEnc);
+            if (!pointR.multiply(pointN).isInfinity()) {
+                return new byte[0];
+            }
+
+            BigInteger pointE = new BigInteger(1, message);
+            BigInteger pointEInv = BigInteger.ZERO.subtract(pointE).mod(pointN);
+            BigInteger pointRInv = new BigInteger(1, sigR).modInverse(pointN);
+            BigInteger srInv = pointRInv.multiply(new BigInteger(1, sigS)).mod(pointN);
+            BigInteger pointEInvRInv = pointRInv.multiply(pointEInv).mod(pointN);
+            ECPoint pointQ = ECAlgorithms.sumOfTwoMultiplies(spec.getG(), pointEInvRInv, pointR, srInv);
+            return pointQ.getEncoded(false);
+        } catch (Exception e) {
+            LOGGER.warn("Error recovering public key from message");
+        }
+
+        return new byte[0];
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+        //
+        //
+        //
+        //
+        //
+
+//
+//        BigInteger r = null;
+//        BigInteger s = null;
+//        SecureRandom random = new SecureRandom();
+//        AsymmetricCipherKeyPair tempPair;
+//        BigInteger n = curve.getN();
+//        BigInteger e = new BigInteger(1, msgHash);
+//        // generate r
+//        do {
+//            // generate another, but very temporary, key pair using
+//            // the same EC parameters
+//            ECKeyPairGenerator keyGen = new ECKeyPairGenerator();
+//
+//            keyGen.init(new ECKeyGenerationParameters(privatekey.getParameters(), random));
+//
+//            tempPair = keyGen.generateKeyPair();
+//
+//            //    BigInteger Vx = tempPair.getPublic().getW().getAffineX();
+//            ECPublicKeyParameters V = (ECPublicKeyParameters) tempPair.getPublic();        // get temp's public key
+//            BigInteger Vx = V.getQ().getAffineXCoord().toBigInteger();                    // get the point's x coordinate
+//
+//            r = Vx.add(e).mod(n);
+//        } while (r.equals(ECConstants.ZERO));
+//
+//        // generate s
+//        BigInteger x = privatekey.getD();                // private key value
+//        BigInteger u = ((ECPrivateKeyParameters) tempPair.getPrivate()).getD();    // temp's private key value
+//        s = u.subtract(r.multiply(x)).mod(n);
+//
+//        System.out.println(String.format("r = %s", Numeric.toHexStringWithPrefix(r)));
+//        System.out.println(String.format("s = %s", Numeric.toHexStringWithPrefix(s)));
+//
+//
+//        ECDSASignature ecdsaSignature2 = new ECDSASignature(r, s);
+//        /* The recId is an index from 0 to 3 which indicates which of the 4 possible keys is the
+//         * correct one. Because the key recovery operation yields multiple potential keys, the correct
+//         * key must either be stored alongside the signature, or you must be willing to try each recId
+//         * in turn until you find one that outputs the key you are expecting. */
+//        // https://github.com/web3j/web3j/blob/c65e6bebf52fd3e897056b0ffb8dac01153668f1/crypto/src/main/java/org/web3j/crypto/Sign.java#L84-L92
+//        for (int i = 0; i < 4; i++) {
+//            // An ECKey containing only the public part, or null if recovery wasn't possible.
+//            BigInteger ecPublicPartKey = Sign.recoverFromSignature(i, ecdsaSignature2, msgHash);
+//
+//            if (!Objects.isNull(ecPublicPartKey)) {
+//                System.out.println(String.format("recId %d yields: %s", i, ecPublicPartKey.toString(16)));
+//            } else {
+//                System.out.println(String.format("recId %d is not correct", i));
+//            }
+//        }
